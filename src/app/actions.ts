@@ -1,8 +1,7 @@
 'use server';
 
-import { error } from "console";
+import { existsSync, readdirSync, createReadStream } from "fs";
 import { createHash } from "crypto";
-import { existsSync, readdirSync, readFileSync } from "fs";
 import path from "path";
 
 export interface FolderEntry {
@@ -91,6 +90,25 @@ export async function openPreviousFolder(currentPath: string) {
     return await getNavigationData(fullPath);
 }
 
+function calculateFileHash(filePath: string): Promise<string> {
+    return new Promise((resolve, reject) => {
+        const hash = createHash('sha256');
+        const stream = createReadStream(filePath);
+
+        stream.on('data', (data) => {
+            hash.update(data);
+        });
+
+        stream.on('end', () => {
+            resolve(hash.digest('hex'));
+        });
+
+        stream.on('error', (err) => {
+            reject(err);
+        });
+    });
+}
+
 export async function checkDuplicates(folderPath: string) {
     if (!folderPath) return {
         success: false, error: {
@@ -98,58 +116,63 @@ export async function checkDuplicates(folderPath: string) {
             message: 'Path not provided!'
         }
     };
-    try {
 
+    try {
         const fullPath = path.normalize(folderPath);
 
-        if (!existsSync(fullPath)) return { success: false, error: { type: "not_found", message: "Folder not exists!" } };
+        if (!existsSync(fullPath)) {
+            return { success: false, error: { type: "not_found", message: "Folder not exists!" } };
+        }
 
         const folderContents = readdirSync(fullPath, {
             recursive: true,
             withFileTypes: true,
         });
 
-        const checked: Record<string, {
-            name: string;
-            path: string;
-        }> = {};
+        const checked: Record<string, { name: string; path: string; }> = {};
+        const duplicates: Record<string, { name: string; path: string; }[]> = {};
 
-        const duplicates: Record<string, {
-            name: string;
-            path: string;
-        }[]> = {};
-
-        folderContents.forEach(ent => {
+        for (const ent of folderContents) {
             if (ent.isFile()) {
-                const pathToFile = path.join(ent.parentPath, ent.name);
-                const buffer = readFileSync(pathToFile);
-                const hash = createHash('sha256').update(buffer).digest('hex');
+                const parentDir = ent.parentPath || ent.path; 
+                const pathToFile = path.join(parentDir, ent.name);
 
-                if (checked[hash]) {
-                    if (!duplicates[hash]) duplicates[hash] = [];
+                try {
+                    const hash = await calculateFileHash(pathToFile);
 
-                    duplicates[hash].push(checked[hash], {
-                        name: ent.name,
-                        path: ent.parentPath,
-                    });
+                    if (checked[hash]) {
+                        if (!duplicates[hash]) {
+                            duplicates[hash] = [
+                                checked[hash],
+                                { name: ent.name, path: parentDir }
+                            ];
+                        } else {
+                            duplicates[hash].push({
+                                name: ent.name,
+                                path: parentDir,
+                            });
+                        }
+                    } else {
+                        checked[hash] = {
+                            name: ent.name,
+                            path: parentDir,
+                        };
+                    }
+                } catch (fileError) {
+                    console.error(`Ошибка при чтении файла ${pathToFile}:`, fileError);
+                    continue; 
                 }
-
-                checked[hash] = {
-                    name: ent.name,
-                    path: ent.parentPath,
-                };
             }
-        });
+        }
 
         return { success: true, duplicates };
 
-
-    } catch (error) {
+    } catch (error: any) {
         return {
             success: false, error: {
                 type: 'other',
-                message: error,
+                message: error?.message || String(error),
             }
-        }
+        };
     }
 }
