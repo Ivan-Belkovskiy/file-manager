@@ -1,0 +1,126 @@
+.file-navigation__container {
+    position: relative;
+    width: 80%;
+    border: 4px solid #500bc0;
+}
+
+.file-navigation-controls {
+    padding: 7px 0;
+    display: flex;
+    border-bottom: 2px solid #500bc0;
+}
+
+.file-navigation-controls__left {
+    width: 15%;
+    height: 100%;
+}
+
+.file-navigation-controls__right {
+    width: 85%;
+    height: 100%;
+    padding-right: 10px;
+}
+
+.file-navigation-controls__button {
+    padding: 0 10px;
+    border: 2px solid #500bc0;
+    color: #500bc0;
+    margin-left: 10px;
+    transition: all 0.25s ease 0s;
+}
+
+.file-navigation-controls__button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.file-navigation-controls__button:not(:disabled):hover {
+    cursor: pointer;
+    background-color: #500bc0;
+    color: #fff;
+}
+
+
+.file-navigation-path {
+    border: 2px solid #500bc0;
+    padding: 0 10px;
+    color: #500bc0;
+    cursor: text;
+}
+
+
+.file-navigation__content {
+    position: relative;
+    height: 550px;
+    overflow-y: auto;
+}
+
+.file-navigation-entry {
+    padding: 10px 8px;
+    background-color: #fff;
+    color: #500bc0;
+    transition: all 0.25s ease 0s;
+    display: flex;
+    align-items: center;
+}
+
+.file-navigation-entry__left {
+    display: flex;
+}
+
+.file-navigation-entry__right {
+    width: auto;
+    display: flex;
+    flex-direction: column;
+    margin-left: 10px;
+}
+
+.file-navigation-entry:hover {
+    cursor: pointer;
+    background-color: #500bc0;
+    color: #fff;
+}
+
+.file-navigation-entry__icon {
+    width: 60px;
+    max-height: 40px;
+}
+
+.file-navigation__notification {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    color: #500bc0;
+    font-size: 25px;
+}
+
+.file-navigation-group {
+    background-color: #8f7a03;
+    padding: 0 5px;
+    color: #fff;
+}
+
+.file-navigation-group__header {
+    display: inline-block;
+    margin: 5px 0;
+    margin-left: 10px;
+}
+
+.file-navigation-group__button:hover {
+    cursor: pointer;
+}
+
+.file-navigation__duplicates {
+    padding: 5px 0;
+}
+
+.file-navigation-entry__path {
+    max-width: 100%;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    color: #9d86c2;
+    margin-top: 7px;
+}
