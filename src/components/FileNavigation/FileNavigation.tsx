@@ -96,30 +96,63 @@ export default function FileNavigation({ initialPath = "D:/" }: FileNavigationPr
 
     }
 
+    const [progress, setProgress] = useState<{ current: number; total: number; percent: number } | null>(null);
+
     const handleDuplicateCheck = async () => {
         if (isLoading) return;
 
         setLoading(true);
-        setAction({
-            type: 'duplicateCheck',
-        });
-        const res = await checkDuplicates(currentPath);
+        setAction({ type: 'duplicateCheck' });
+        setProgress({ current: 0, total: 0, percent: 0 });
 
-        if (res.success && res.duplicates) {
-            setAction({
-                type: 'duplicateCheck',
-                duplicates: res.duplicates,
-            });
-            // console.log('DUPLICATES:');
-            // console.log(res.duplicates);
-        } else {
-            // setLoadingError({
-            //     type: res.error?.type,
-            //     message: res.error?.message || "",
-            // });
+        try {
+            const response = await fetch(`/api/duplicates?path=${encodeURIComponent(currentPath)}`);
+
+            if (!response.body) return;
+
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+            let buffer = "";
+
+            while (true) {
+                const { value, done } = await reader.read();
+                if (done) break;
+
+                buffer += decoder.decode(value, { stream: true });
+
+                const lines = buffer.split("\n");
+
+                buffer = lines.pop() || "";
+
+                for (const line of lines) {
+                    if (!line.trim()) continue;
+
+                    const data = JSON.parse(line);
+
+                    if (data.type === "progress") {
+                        setProgress({
+                            current: data.current,
+                            total: data.total,
+                            percent: data.percent
+                        });
+                    } else if (data.type === "done") {
+                        setAction({
+                            type: 'duplicateCheck',
+                            duplicates: data.duplicates,
+                        });
+                        setProgress(null);
+                    } else if (data.type === "error") {
+                        setLoadingError({ type: "other", message: data.message });
+                    }
+                }
+            }
+
+        } catch (err: any) {
+            console.error("Ошибка стриминга:", err);
+        } finally {
+            setLoading(false);
         }
-        setLoading(false);
-    }
+    };
 
     useEffect(() => {
         loadData();
@@ -202,18 +235,18 @@ export default function FileNavigation({ initialPath = "D:/" }: FileNavigationPr
                             <div className="file-navigation-group" key={i}>
                                 <div className="file-navigation-group__header">
                                     <button
-                                     className="file-navigation-group__button"
-                                     onClick={() => {
-                                        setAction({
-                                            ...action,
-                                            collapsedGroups: {
-                                                ...action.collapsedGroups,
-                                                [(g[0])]: (
-                                                    action.collapsedGroups?.[g[0]] === true ? false : true
-                                                )
-                                            }
-                                        })
-                                     }}
+                                        className="file-navigation-group__button"
+                                        onClick={() => {
+                                            setAction({
+                                                ...action,
+                                                collapsedGroups: {
+                                                    ...action.collapsedGroups,
+                                                    [(g[0])]: (
+                                                        action.collapsedGroups?.[g[0]] === true ? false : true
+                                                    )
+                                                }
+                                            })
+                                        }}
                                     >{action.collapsedGroups?.[(g[0])] === true ? '▶' : '▼'}</button>
                                     <span>{g[1].length} одинаковых {getWordEndingByNumber(g[1].length, 'файл')}:</span>
                                 </div>
@@ -239,7 +272,24 @@ export default function FileNavigation({ initialPath = "D:/" }: FileNavigationPr
                             <div className="file-navigation__notification">В папке нет файлов. Дубликаты не обнаружены!</div>
                         )
                     ) : (
-                        <div className="file-navigation__notification">{isLoading ? 'Проверка на дублирование файлов...' : 'Дубликаты не обнаружены!'}</div>
+                        <div className="file-navigation__notification">{isLoading ? (
+                            <>
+                                <span>Проверка на дублирование файлов...</span>
+                                {progress && (
+                                    <div className="file-manager-progress__container">
+                                        <div className="file-manager-progress__bar-wrapper">
+                                            <div
+                                                className="file-manager-progress__bar-fill"
+                                                style={{ width: `${progress.percent}%` }}
+                                            ></div>
+                                        </div>
+                                        <div className="file-manager-progress__text">
+                                            Проверено файлов: {progress.current} из {progress.total} ({progress.percent}%)
+                                        </div>
+                                    </div>
+                                )}
+                            </>
+                        ) : 'Дубликаты не обнаружены!'}</div>
                     )
                 )}
             </div>
