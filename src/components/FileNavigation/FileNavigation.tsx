@@ -1,11 +1,12 @@
 'use client';
 
-import { checkDuplicates, enterFolder, FolderEntry, getNavigationData, LoadingError, openPreviousFolder } from "@/app/actions";
+import { checkDuplicates, createFolder, deleteFolder, enterFolder, FolderEntry, getNavigationData, LoadingError, openPreviousFolder, renameFileOrFolder } from "@/app/actions";
 import "./FileNavigation.css";
-import { useEffect, useRef, useState } from "react";
+import { MouseEvent, useEffect, useRef, useState } from "react";
 import { getImageForDirEntry } from "@/utils/images";
-import ContextMenu from "../ContextMenu/ContextMenu";
+import ContextMenu, { ContextMenuItem, MEvent } from "../ContextMenu/ContextMenu";
 import { getWordEndingByNumber } from "@/utils/string";
+import SimpleModal from "../UI/SimpleModal/SimpleModal";
 
 export interface FileNavigationProps {
     initialPath?: string;
@@ -30,6 +31,8 @@ export default function FileNavigation({ initialPath = "D:/" }: FileNavigationPr
     const [loadingError, setLoadingError] = useState<LoadingError>();
     const [data, setData] = useState<FolderEntry[]>([]);
 
+    const [selectedItem, setSelectedItem] = useState<FolderEntry | null>(null);
+
     const [action, setAction] = useState<NavigationAction>({
         type: 'navigation',
     });
@@ -44,8 +47,16 @@ export default function FileNavigation({ initialPath = "D:/" }: FileNavigationPr
         y: number;
     } | null>(null);
 
-    const activateContextMenuRef = useRef<((e: MouseEvent) => void) | null>(null);
+    const [ctxMenuCurrentDir, setCtxMenuCurrentDir] = useState<FolderEntry | null>(null);
+
+
+    const activateContextMenuRef = useRef<((e: MouseEvent | MEvent) => void) | null>(null);
     const closeContextMenuRef = useRef<(() => void) | null>(null);
+
+    const [openedModal, setOpenedModal] = useState<'add-folder' | {
+        type: "delete-folder";
+        folder: FolderEntry;
+    } | null>(null);
 
     const loadData = async () => {
         setLoading(true);
@@ -60,7 +71,7 @@ export default function FileNavigation({ initialPath = "D:/" }: FileNavigationPr
         setLoading(false);
     }
 
-    const handleEntryClick = async (ent: FolderEntry) => {
+    const handleEntryClick = async (e: MouseEvent<HTMLDivElement>, ent: FolderEntry) => {
         if (action.type !== 'navigation') return;
         if (isLoading) return;
         const res = await enterFolder(currentPath, ent.name);
@@ -72,6 +83,12 @@ export default function FileNavigation({ initialPath = "D:/" }: FileNavigationPr
             setLoadingError(res.error);
         }
         setLoading(false);
+    }
+
+    const handleEntryRightClick = (e: MouseEvent<HTMLDivElement>, ent: FolderEntry) => {
+
+        setCtxMenuCurrentDir(ent);
+        activateContextMenuRef.current?.(e);
     }
 
     const handleBackButton = async () => {
@@ -154,17 +171,119 @@ export default function FileNavigation({ initialPath = "D:/" }: FileNavigationPr
         }
     };
 
+    const handleAddFolder = async (name: string) => {
+        if (action.type === 'navigation') {
+            if (isLoading) return;
+            // const name = prompt('Введите название папки:');
+            if (!name) return;
+            const res = await createFolder(currentPath, name);
+
+            if (res.success && res.data) {
+                setData(res.data);
+                setCurrentPath(res.normalizedPath);
+            } else {
+                setLoadingError(res.error);
+            }
+            setLoading(false);
+        }
+    }
+
+    const handleDeleteFolder = async (data: FolderEntry) => {
+        if (action.type === 'navigation') {
+            if (isLoading) return;
+            if (!data.parentPath) return;
+            const res = await deleteFolder(data.parentPath, data.name);
+
+            if (res.success && res.data) {
+                setData(res.data);
+                setCurrentPath(res.normalizedPath);
+            } else {
+                setLoadingError(res.error);
+            }
+            setLoading(false);
+        }
+    }
+
+
+    const enterFolderAndNext = async (ent: FolderEntry) => {
+        const res = await enterFolder(currentPath, ent.name);
+
+        if (res.success && res.data) {
+            setData(res.data);
+            setCurrentPath(res.normalizedPath);
+        } else {
+            setLoadingError(res.error);
+        }
+        setLoading(false);
+    }
+
+    const moveFileOrFolder = async (ent: FolderEntry, newPath: string) => {
+        if (!ent.parentPath || !newPath) return;
+        const res = await renameFileOrFolder(ent, newPath);
+
+        if (res.success && res.data) {
+            setData(res.data);
+            setCurrentPath(res.normalizedPath);
+        } else {
+            setLoadingError(res.error);
+        }
+        setSelectedItem(null);
+        setLoading(false);
+    }
+
+    const downloadFile = async (ent: FolderEntry) => {
+        if (!ent.parentPath) return;
+        try {
+            // const res = await fetch(`/api/download?path=${encodeURIComponent(ent.parentPath)}&filename=${encodeURIComponent(ent.name)}`);
+            const url = `/api/download?path=${encodeURIComponent(ent.parentPath)}&filename=${encodeURIComponent(ent.name)}`;
+
+            const a = document.createElement('a');
+            a.href = url;
+            a.click();
+
+            a.remove();
+
+        } catch (error) {
+
+        }
+    }
+
+
+    const downloadFolder = async (ent: FolderEntry) => {
+        const folderParentPath = ent.parentPath || currentPath;
+
+        try {
+            const url = `/api/download/folder?path=${encodeURIComponent(folderParentPath)}&name=${encodeURIComponent(ent.name)}`;
+
+            const a = document.createElement('a');
+            a.href = url;
+            a.style.display = 'none';
+            document.body.appendChild(a);
+
+            a.click();
+
+            document.body.removeChild(a);
+
+        } catch (error) {
+            console.error("Ошибка скачивания папки:", error);
+        }
+    }
+
     useEffect(() => {
         loadData();
     }, [initialPath]);
 
     useEffect(() => {
-        const contextMenuHandler = (e: MouseEvent) => {
+        const contextMenuHandler = (e: MEvent) => {
             if (!contentRef.current) return;
             console.log('Context menu event:');
             console.log(e);
 
+            // if ((e.currentTarget as HTMLElement).className === 'entry');
+
+            setCtxMenuCurrentDir(null);
             activateContextMenuRef.current?.(e);
+
             // setContextMenuOpen(true);
 
             // setContextMenuPosition({
@@ -197,7 +316,80 @@ export default function FileNavigation({ initialPath = "D:/" }: FileNavigationPr
             (loadingError) ? 'ПОИСК НА ДУБЛИРОВАНИЕ ФАЙЛОВ - ОШИБКА!' :
                 'РЕЗУЛЬТАТЫ ПОИСКА НА ДУБЛИРОВАНИЕ ФАЙЛОВ'
         }: ${currentPath}`
-    ) : currentPath
+    ) : currentPath;
+
+
+    const contextMenuItems: ContextMenuItem[] = (ctxMenuCurrentDir) ? (
+        (ctxMenuCurrentDir.isDirectory) ? [
+            {
+                type: "button",
+                label: "Перейти в папку",
+                onClick: () => enterFolderAndNext(ctxMenuCurrentDir),
+            },
+            {
+                type: "button",
+                label: "Переместить...",
+                onClick: () => setSelectedItem(ctxMenuCurrentDir),
+            },
+            {
+                type: "button",
+                label: "Удалить папку",
+                onClick: () => setOpenedModal({
+                    type: "delete-folder",
+                    folder: ctxMenuCurrentDir,
+                }),
+            },
+            {
+                type: "separator"
+            },
+            {
+                type: "button",
+                label: "Скачать папку",
+                onClick: () => downloadFolder(ctxMenuCurrentDir),
+            },
+            // {
+            //     type: "separator"
+            // },
+            // {
+            //     type: "button",
+            //     label: "Проверить на дублирование файлов ...",
+            //     onClick: () => handleDuplicateCheck(),
+            //     // onClick: () => alert('Привет! Это кнопка!')
+            // }
+        ] : [
+            {
+                type: "info",
+                label: ""
+            },
+            {
+                type: "separator"
+            },
+            {
+                type: "button",
+                label: "Скачать файл",
+                onClick: () => downloadFile(ctxMenuCurrentDir),
+            }
+        ]
+    ) : [
+        {
+            type: "button",
+            label: "[⇑] Назад"
+        },
+        {
+            type: "button",
+            label: "+ Новая папка",
+            onClick: () => setOpenedModal('add-folder'),
+        },
+        {
+            type: "separator"
+        },
+        {
+            type: "button",
+            label: "Проверить на дублирование файлов ...",
+            onClick: () => handleDuplicateCheck(),
+            // onClick: () => alert('Привет! Это кнопка!')
+        }
+    ];
 
     return (
         <div className="file-navigation__container">
@@ -216,8 +408,15 @@ export default function FileNavigation({ initialPath = "D:/" }: FileNavigationPr
                     data.length > 0 ? (
                         data.map((ent, idx) => (
                             <div
-                                className="file-navigation-entry"
-                                onClick={() => handleEntryClick(ent)}
+                                className={`file-navigation-entry ${(selectedItem?.parentPath === ent.parentPath && selectedItem?.name === ent.name) ?
+                                    "to-move" : ""
+                                    }`}
+                                onClick={(e) => {
+                                    if (!(selectedItem?.parentPath === ent.parentPath && selectedItem?.name === ent.name)) {
+                                        handleEntryClick(e, ent);
+                                    }
+                                }}
+                                onContextMenu={(e) => handleEntryRightClick(e, ent)}
                                 key={idx}
                             >
                                 <div className="file-navigation-entry__left">
@@ -231,46 +430,51 @@ export default function FileNavigation({ initialPath = "D:/" }: FileNavigationPr
                     )
                 ) : (action.type === 'duplicateCheck') && (
                     action.duplicates ? (
-                        Object.entries(action.duplicates).length > 0 ? (Object.entries(action.duplicates).map((g, i) => (
-                            <div className="file-navigation-group" key={i}>
-                                <div className="file-navigation-group__header">
-                                    <button
-                                        className="file-navigation-group__button"
-                                        onClick={() => {
-                                            setAction({
-                                                ...action,
-                                                collapsedGroups: {
-                                                    ...action.collapsedGroups,
-                                                    [(g[0])]: (
-                                                        action.collapsedGroups?.[g[0]] === true ? false : true
-                                                    )
-                                                }
-                                            })
-                                        }}
-                                    >{action.collapsedGroups?.[(g[0])] === true ? '▶' : '▼'}</button>
-                                    <span>{g[1].length} одинаковых {getWordEndingByNumber(g[1].length, 'файл')}:</span>
+                        <>
+                            {/* <div className="file-navigation__data">
+                                <span>Общий размер файлов: </span>
+                            </div> */}
+                            {Object.entries(action.duplicates).length > 0 ? (Object.entries(action.duplicates).map((g, i) => (
+                                <div className="file-navigation-group" key={i}>
+                                    <div className="file-navigation-group__header">
+                                        <button
+                                            className="file-navigation-group__button"
+                                            onClick={() => {
+                                                setAction({
+                                                    ...action,
+                                                    collapsedGroups: {
+                                                        ...action.collapsedGroups,
+                                                        [(g[0])]: (
+                                                            action.collapsedGroups?.[g[0]] === true ? false : true
+                                                        )
+                                                    }
+                                                })
+                                            }}
+                                        >{action.collapsedGroups?.[(g[0])] === true ? '▶' : '▼'}</button>
+                                        <span>{g[1].length} одинаковых {getWordEndingByNumber(g[1].length, 'файл')}:</span>
+                                    </div>
+                                    {(action.collapsedGroups?.[(g[0])] !== true) && <div className="file-navigation__duplicates">
+                                        {g[1].map((ent, idx) => (
+                                            <div
+                                                className="file-navigation-entry"
+                                                // onClick={() => handleEntryClick(ent)}
+                                                key={idx}
+                                            >
+                                                <div className="file-navigation-entry__left">
+                                                    <img src={getImageForDirEntry(ent)} alt="Entry Icon" className="file-navigation-entry__icon" />
+                                                </div>
+                                                <div className="file-navigation-entry__right">
+                                                    <span className="file-navigation-entry__name">{ent.name}</span>
+                                                    <span className="file-navigation-entry__path" title={ent.path}>{ent.path}</span>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>}
                                 </div>
-                                {(action.collapsedGroups?.[(g[0])] !== true) && <div className="file-navigation__duplicates">
-                                    {g[1].map((ent, idx) => (
-                                        <div
-                                            className="file-navigation-entry"
-                                            // onClick={() => handleEntryClick(ent)}
-                                            key={idx}
-                                        >
-                                            <div className="file-navigation-entry__left">
-                                                <img src={getImageForDirEntry(ent)} alt="Entry Icon" className="file-navigation-entry__icon" />
-                                            </div>
-                                            <div className="file-navigation-entry__right">
-                                                <span className="file-navigation-entry__name">{ent.name}</span>
-                                                <span className="file-navigation-entry__path">{ent.path}</span>
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>}
-                            </div>
-                        ))) : (
-                            <div className="file-navigation__notification">В папке нет файлов. Дубликаты не обнаружены!</div>
-                        )
+                            ))) : (
+                                <div className="file-navigation__notification">В папке нет файлов. Дубликаты не обнаружены!</div>
+                            )}
+                        </>
                     ) : (
                         <div className="file-navigation__notification">{isLoading ? (
                             <>
@@ -293,32 +497,53 @@ export default function FileNavigation({ initialPath = "D:/" }: FileNavigationPr
                     )
                 )}
             </div>
+            {(selectedItem) && <div className="file-navigation__bottom">
+                <button
+                    className="file-navigation__button"
+                    onClick={() => {
+                        moveFileOrFolder(selectedItem, currentPath);
+                    }}
+                >Переместить в текущую папку</button>
+                <button
+                    className="file-navigation__button"
+                    onClick={() => setSelectedItem(null)}
+                >Отменить перемещение</button>
+            </div>}
             <ContextMenu
                 activateRef={activateContextMenuRef}
                 closeRef={closeContextMenuRef}
                 // isOpened={isContextMenuOpen}
                 containerRef={contentRef}
-                items={[
-                    {
-                        type: "button",
-                        label: "[⇑] Назад"
-                    },
-                    {
-                        type: "separator"
-                    },
-                    {
-                        type: "button",
-                        label: "Проверить на дублирование файлов ...",
-                        onClick: () => handleDuplicateCheck(),
-                        // onClick: () => alert('Привет! Это кнопка!')
-                    }
-                ]}
+                items={contextMenuItems}
                 // onClose={() => setContextMenuOpen(false)}
                 styles={{
                     top: `${contextMenuPosition?.y || 0}px`,
                     left: `${contextMenuPosition?.x || 0}px`,
                 }}
             />
+            {(openedModal === 'add-folder') ? (
+                <SimpleModal
+                    type="prompt"
+                    title="Введите название папки:"
+
+                    onConfirm={(v) => {
+                        handleAddFolder(v);
+                        setOpenedModal(null);
+                    }}
+                    onCancel={() => setOpenedModal(null)}
+                />
+            ) : (openedModal?.type === 'delete-folder') && (
+                <SimpleModal
+                    type="prompt"
+                    title={`Удалить папку "${openedModal.folder.name}" безвозвратно? Введите "Удалить папку ${openedModal.folder.name}!" для подтверждения!`}
+
+                    onConfirm={(v) => {
+                        if (v === `Удалить папку ${openedModal.folder.name}!`) handleDeleteFolder(openedModal.folder);
+                        setOpenedModal(null);
+                    }}
+                    onCancel={() => setOpenedModal(null)}
+                />
+            )}
         </div>
     )
 }

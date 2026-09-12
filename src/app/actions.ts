@@ -1,6 +1,6 @@
 'use server';
 
-import { existsSync, readdirSync, createReadStream } from "fs";
+import { existsSync, readdirSync, createReadStream, mkdirSync, rmSync, rmdirSync, renameSync } from "fs";
 import { createHash } from "crypto";
 import path from "path";
 
@@ -35,7 +35,7 @@ export async function getNavigationData(filepath: string) {
     const data = readdirSync(normalizedPath, {
         withFileTypes: true,
     }).sort((a, b) => (
-        (b.isDirectory()) ? 1 : -1
+        (b.isDirectory()) ? 1 : -1 
     ));
 
     const resultData = data.map(ent => ({
@@ -88,6 +88,74 @@ export async function openPreviousFolder(currentPath: string) {
     };
 
     return await getNavigationData(fullPath);
+}
+
+export async function createFolder(currentPath: string, newFolderName: string) {
+    if (!currentPath || !newFolderName) return {
+        success: false, error: {
+            type: 'other',
+            message: "Path or new folder name not provided!"
+        }
+    };
+
+    const fullPath = path.join(currentPath, newFolderName);
+
+    if (existsSync(fullPath)) return {
+        success: false, error: {
+            type: "already_exists",
+            message: "Directory is already exists!"
+        }
+    };
+
+    mkdirSync(fullPath);
+
+    return await getNavigationData(currentPath);
+}
+
+export async function deleteFolder(currentPath: string, folderName: string) {
+    if (!currentPath || !folderName) return {
+        success: false, error: {
+            type: 'other',
+            message: "Path or new folder name not provided!"
+        }
+    };
+
+    const fullPath = path.join(currentPath, folderName);
+
+    if (!existsSync(fullPath)) return {
+        success: false, error: {
+            type: "not_exists",
+            message: "Directory does not exists!"
+        }
+    };
+
+    rmdirSync(fullPath);
+
+    return await getNavigationData(currentPath);
+}
+
+
+export async function renameFileOrFolder(entry: FolderEntry, nPath: string) {
+    if (!entry.parentPath || !nPath) return {
+        success: false, error: {
+            type: 'other',
+            message: "Old data or new path not provided!"
+        }
+    };
+
+    const oldPath = path.join(entry.parentPath, entry.name);
+    const newPath = path.join(nPath, entry.name);
+
+    if (!existsSync(oldPath)) return {
+        success: false, error: {
+            type: "not_exists",
+            message: "Directory does not exists!"
+        }
+    };
+
+    renameSync(oldPath, newPath);
+
+    return await getNavigationData(nPath);
 }
 
 function calculateFileHash(filePath: string): Promise<string> {

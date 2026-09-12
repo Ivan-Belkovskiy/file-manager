@@ -53,6 +53,7 @@
     position: relative;
     height: 550px;
     overflow-y: auto;
+    padding-bottom: 150px;
 }
 
 .file-navigation-entry {
@@ -75,7 +76,7 @@
     margin-left: 10px;
 }
 
-.file-navigation-entry:hover {
+.file-navigation-entry:not(.to-move):hover {
     cursor: pointer;
     background-color: #500bc0;
     color: #fff;
@@ -118,7 +119,8 @@
 }
 
 .file-navigation-entry__path {
-    max-width: 100%;
+    /* max-width: 80%; */
+    max-width: 1000px;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -138,13 +140,52 @@
     overflow: hidden;
     margin-bottom: 8px;
 }
+
 .file-manager-progress__bar-fill {
     height: 100%;
-    background: #500bc0; 
-    transition: width 0.1s ease-out; 
+    background: #500bc0;
+    transition: width 0.1s ease-out;
 }
+
 .file-manager-progress__text {
     font-size: 18px;
     color: #500bc0;
     text-align: center;
+}
+
+.file-navigation-entry__icon {
+    scale: 0.8;
+    transition: all 0.3s ease 0s;
+}
+
+.file-navigation-entry:not(.to-move):hover .file-navigation-entry__icon {
+    scale: 1;
+}
+
+.file-navigation__bottom {
+    width: 100%;
+    display: flex;
+    border-top: 3px solid #500bc0;
+}
+
+.file-navigation__button {
+    width: 50%;
+    background-color: #fff;
+    color: #500bc0;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 10px 0;
+    transition: all 0.3s ease 0s;
+}
+
+.file-navigation__button:hover {
+    background-color: #500bc0;
+    color: #fff;
+    cursor: pointer;
+}
+
+.file-navigation-entry.to-move {
+    opacity: 0.5;
+    cursor: not-allowed;
 }

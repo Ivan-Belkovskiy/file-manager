@@ -5,7 +5,8 @@ import "./page.css";
 export default function Home() {
   return (
     <div className="app-container">
-      <h1>Next.js Interactive File Manager</h1>
+      {/* <h1>Next.js Interactive File Manager</h1> */}
+      <h1>Next.js File Manager</h1>
       <FileNavigation />
     </div>
   );

@@ -20,6 +20,8 @@ export interface ContextMenuProps {
     containerRef?: RefObject<HTMLDivElement | null>
 }
 
+export type MEvent = MouseEvent;
+
 export default function ContextMenu({ activateRef, closeRef, items, styles, containerRef }: ContextMenuProps) {
 
     const menuRef = useRef<HTMLDivElement | null>(null);
@@ -44,7 +46,7 @@ export default function ContextMenu({ activateRef, closeRef, items, styles, cont
         const containerRect = containerRef.current.getBoundingClientRect();
 
         setPositions({
-            top: e.clientY - (containerRect.top / 2) - (menuRect.height / 2),
+            top: e.clientY - (containerRect.top / 2),
             left: e.clientX - (containerRect.left),
         });
 
