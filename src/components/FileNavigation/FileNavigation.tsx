@@ -1,8 +1,9 @@
 'use client';
 
+import axios, { AxiosProgressEvent } from "axios";
 import { checkDuplicates, createFolder, deleteFolder, enterFolder, FolderEntry, getNavigationData, LoadingError, openPreviousFolder, renameFileOrFolder } from "@/app/actions";
 import "./FileNavigation.css";
-import { MouseEvent, useEffect, useRef, useState } from "react";
+import { ChangeEvent, MouseEvent, useEffect, useRef, useState } from "react";
 import { getImageForDirEntry } from "@/utils/images";
 import ContextMenu, { ContextMenuItem, MEvent } from "../ContextMenu/ContextMenu";
 import { getWordEndingByNumber } from "@/utils/string";
@@ -25,7 +26,7 @@ export type NavigationAction = {
     collapsedGroups?: Record<string, boolean>;
 }
 
-export default function FileNavigation({ initialPath = "D:/" }: FileNavigationProps) {
+export default function FileNavigation({ initialPath = "C:/" }: FileNavigationProps) {
 
     const [isLoading, setLoading] = useState(true);
     const [loadingError, setLoadingError] = useState<LoadingError>();
@@ -391,6 +392,58 @@ export default function FileNavigation({ initialPath = "D:/" }: FileNavigationPr
         }
     ];
 
+    const fileInputRef = useRef<HTMLInputElement | null>(null);
+    const folderInputRef = useRef<HTMLInputElement | null>(null);
+
+
+
+    const handleUpload = async (e: ChangeEvent<HTMLInputElement>) => {
+        const files = e.target.files;
+        if (!files || files.length === 0) return;
+
+        const formData = new FormData();
+        
+        formData.append("targetPath", currentPath);
+
+        for (let i = 0; i < files.length; i++) {
+            const f = files[i];
+            const relPath = (f as any).webkitRelativePath || f.name;
+            formData.append("file", f, relPath);
+        }
+
+
+        setProgress({ current: 0, total: 0, percent: 0 });
+        setLoading(true);
+
+        try {
+            const res = await axios.post("/api/upload", formData, {
+                onUploadProgress: (e: AxiosProgressEvent) => {
+                    if (!e.total) return;
+                    setProgress({
+                        current: e.loaded,
+                        total: e.total,
+                        percent: Math.round((e.loaded * 100) / e.total),
+                    });
+                },
+            });
+
+            if (!res.data?.success) {
+                setLoadingError({ type: "other", message: res.data?.error ?? "Ошибка" });
+                return;
+            }
+
+            await loadData();
+        } catch (err: any) {
+            console.error(err);
+            setLoadingError({ type: "other", message: err?.message ?? "Ошибка загрузки" });
+        } finally {
+            setProgress(null);
+            setLoading(false);
+            if (fileInputRef.current) fileInputRef.current.value = "";
+            if (folderInputRef.current) folderInputRef.current.value = "";
+        }
+    };
+
     return (
         <div className="file-navigation__container">
             <div className="file-navigation-controls">
@@ -400,7 +453,8 @@ export default function FileNavigation({ initialPath = "D:/" }: FileNavigationPr
                     <button className="file-navigation-controls__button back-button" onClick={handleBackButton}>⇑</button>
                 </div>
                 <div className="file-navigation-controls__right">
-                    <div className="file-navigation-path">{displayText}</div>
+                    <div className="file-navigation-path --desktop-only">{displayText}</div>
+                    <div className="file-navigation-path --mobile-only">{currentPath.replaceAll('\\', '/').endsWith(':/') ? currentPath : currentPath.replaceAll('\\', '/').split('/').pop()}</div>
                 </div>
             </div>
             <div className="file-navigation__content" ref={contentRef}>
@@ -497,7 +551,7 @@ export default function FileNavigation({ initialPath = "D:/" }: FileNavigationPr
                     )
                 )}
             </div>
-            {(selectedItem) && <div className="file-navigation__bottom">
+            {(selectedItem) ? <div className="file-navigation__bottom">
                 <button
                     className="file-navigation__button"
                     onClick={() => {
@@ -508,7 +562,25 @@ export default function FileNavigation({ initialPath = "D:/" }: FileNavigationPr
                     className="file-navigation__button"
                     onClick={() => setSelectedItem(null)}
                 >Отменить перемещение</button>
-            </div>}
+            </div> :
+                <div className="file-navigation__bottom">
+                    <button
+                        className="file-navigation__button"
+                        onClick={() => {
+                            fileInputRef.current?.click();
+                        }}
+                    >Загрузить файлы</button>
+                    <button
+                        className="file-navigation__button"
+                        onClick={() => {
+                            folderInputRef.current?.click();
+                        }}
+                    >Загрузить папку</button>
+                    {/* <button
+                        className="file-navigation__button"
+                        onClick={() => setSelectedItem(null)}
+                    >Загрузить</button> */}
+                </div>}
             <ContextMenu
                 activateRef={activateContextMenuRef}
                 closeRef={closeContextMenuRef}
@@ -543,6 +615,25 @@ export default function FileNavigation({ initialPath = "D:/" }: FileNavigationPr
                     }}
                     onCancel={() => setOpenedModal(null)}
                 />
+            )}
+
+            <input type="file" hidden ref={fileInputRef} multiple onChange={handleUpload} />
+            <input type="file" hidden ref={folderInputRef} multiple {...{
+                webkitdirectory: "true"
+            }} onChange={handleUpload} />
+
+            {(isLoading && progress) && (
+                <div className="upload-modal__overlay">
+                    <div className="upload-modal">
+                        <h1 className="upload-modal__title">Загрузка данных...</h1>
+                        <div className="upload-modal__container">
+                            <div className="upload-progress">
+                                <div className="upload-progress-bar" style={{ width: `${progress?.percent || 0}%` }}></div>
+                            </div>
+                            <div className="upload-modal__info">{progress?.percent} / 100%</div>
+                        </div>
+                    </div>
+                </div>
             )}
         </div>
     )

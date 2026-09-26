@@ -12,7 +12,7 @@
 }
 
 .simple-modal {
-    min-width: 600px;
+    width: 100%;
     min-height: 70px;
     background-color: var(--text-color);
     border: 5px solid var(--primary-color);
@@ -69,4 +69,13 @@
 .simple-modal__button:disabled {
     opacity: 0.5;
     cursor: not-allowed;
+}
+
+@media (min-width: 1024px) {
+    
+    .simple-modal {
+        width: auto;
+        min-width: 600px;
+    }
+
 }
